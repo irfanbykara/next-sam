@@ -44,12 +44,18 @@ self.onmessage = async (e) => {
     });
     self.postMessage({ type: "stats", data: stats });
   } else if (type === "decodeMask") {
-    const point = data;
+    const {points, maskArray, maskShape} = data;
 
     const startTime = performance.now();
-    const decodingResults = await sam.decode(point); // decodingResults = Tensor [B=1, Masks, W, H]
-    const durationMs = performance.now() - startTime;
-    stats.decodeTimes.push(durationMs);
+
+    let decodingResults 
+    if (maskArray) {
+      const maskTensor = new Tensor("float32", maskArray, maskShape);
+      decodingResults = await sam.decode(points, maskTensor); 
+    } else {
+      decodingResults = await sam.decode(points); 
+    }
+    // decodingResults = Tensor [B=1, Masks, W, H]
 
     self.postMessage({ type: "decodeMaskResult", data: decodingResults });
     self.postMessage({ type: "stats", data: stats });

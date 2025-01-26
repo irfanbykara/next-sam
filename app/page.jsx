@@ -36,12 +36,15 @@ import {
   maskImageCanvas,
   resizeAndPadBox,
   canvasToFloat32Array,
-  sliceTensorMask,
+  float32ArrayToCanvas,
+  sliceTensor,
+  maskCanvasToFloat32Array
 } from "@/lib/imageutils";
 
 export default function Home() {
   // resize+pad all images to 1024x1024
   const imageSize = { w: 1024, h: 1024 };
+  const maskSize = { w: 256, h: 256 };
 
   // state
   const [device, setDevice] = useState(null);
@@ -53,6 +56,7 @@ export default function Home() {
   const samWorker = useRef(null);
   const [image, setImage] = useState(null); // canvas
   const [mask, setMask] = useState(null); // canvas
+  const [prevMaskArray, setPrevMaskArray] = useState(null); // Float32Array
   // const [imageURL, setImageURL] = useState("/image_landscape.png")
   // const [imageURL, setImageURL] = useState("/image_portrait.png")
   const [urlText, setUrlText] = useState(
@@ -94,13 +98,30 @@ export default function Home() {
       y: ((event.clientY - rect.top) / canvas.height) * imageSize.h,
       label: event.button === 0 ? 1 : 0,
     };
-
     pointsRef.current.push(point);
 
-    samWorker.current.postMessage({
-      type: "decodeMask",
-      data: pointsRef.current,
-    });
+    // do we have a mask already? ie. a refinement click?
+    if (prevMaskArray) {
+      const maskShape = [1, 1, maskSize.w, maskSize.h]
+
+      samWorker.current.postMessage({
+        type: "decodeMask",
+        data: {
+          points: pointsRef.current,
+          maskArray: prevMaskArray,
+          maskShape: maskShape,
+        }
+      });      
+    } else {
+      samWorker.current.postMessage({
+        type: "decodeMask",
+        data: {
+          points: pointsRef.current,
+          maskArray: null,
+          maskShape: null,
+        }
+      });      
+    }
 
     setLoading(true);
     setStatus("Decoding");
@@ -110,12 +131,15 @@ export default function Home() {
   const handleDecodingResults = (decodingResults) => {
     // SAM2 returns 3 mask along with scores -> select best one
     const maskTensors = decodingResults.masks;
+    const [bs, noMasks, width, height] = maskTensors.dims;
     const maskScores = decodingResults.iou_predictions.cpuData;
     const bestMaskIdx = maskScores.indexOf(Math.max(...maskScores));
-    const maskCanvas = sliceTensorMask(maskTensors, bestMaskIdx);
+    const bestMaskArray = sliceTensor(maskTensors, bestMaskIdx)
+    let bestMaskCanvas = float32ArrayToCanvas(bestMaskArray, width, height)
+    bestMaskCanvas = resizeCanvas(bestMaskCanvas, imageSize);
 
-    const resizedMaskCanvas = resizeCanvas(maskCanvas, imageSize);
-    setMask(resizedMaskCanvas);
+    setMask(bestMaskCanvas);
+    setPrevMaskArray(bestMaskArray);
   };
 
   // Handle web worker messages
@@ -169,6 +193,7 @@ export default function Home() {
     const dataURL = urlText;
     setImage(null);
     setMask(null);
+    setPrevMaskArray(null);
     setImageEncoded(false);
     setStatus("Encode image");
     setImageURL(dataURL);

@@ -6,8 +6,10 @@ import * as ort from "onnxruntime-web/all";
 
 const ENCODER_URL =
   "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_encoder.with_runtime_opt.ort";
+  // "/onnx/sam2_hiera_tiny_encoder.with_runtime_opt.ort"
 const DECODER_URL =
-  "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_decoder.onnx";
+  "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_decoder_pr1.onnx";
+  // "/onnx/sam2_hiera_tiny_decoder.onnx"
 
 export class SAM2 {
   bufferEncoder = null;
@@ -24,7 +26,7 @@ export class SAM2 {
   }
 
   async downloadModel(url) {
-    // // step 1: check if cached
+    // step 1: check if cached
     // const root = await navigator.storage.getDirectory();
     // const filename = path.basename(url);
 
@@ -39,6 +41,7 @@ export class SAM2 {
 
     // step 2: download if not cached
     // console.log("File " + filename + " not in cache, downloading from " + url);
+    console.log("File not in cache, downloading from " + url);
     let buffer = null;
     try {
       buffer = await fetch(url, {
@@ -52,7 +55,7 @@ export class SAM2 {
       return null;
     }
 
-    // // step 3: store
+    // step 3: store
     // try {
     //   const fileHandle = await root.getFileHandle(filename, { create: true });
     //   const writable = await fileHandle.createWritable();
@@ -123,7 +126,7 @@ export class SAM2 {
     };
   }
 
-  async decode(points) {
+  async decode(points, masks) {
     const [session, device] = await this.getDecoderSession();
 
     const flatPoints = points.map((point) => {
@@ -137,7 +140,22 @@ export class SAM2 {
     console.log({
       flatPoints,
       flatLabels,
+      masks
     });
+
+    let mask_input, has_mask_input
+    if (masks) {
+      mask_input = masks
+      has_mask_input = new ort.Tensor("float32", [1], [1])
+    } else {
+      // dummy data
+      mask_input = new ort.Tensor(
+        "float32",
+        new Float32Array(256 * 256),
+        [1, 1, 256, 256]
+      )
+      has_mask_input = new ort.Tensor("float32", [0], [1])
+    }
 
     const inputs = {
       image_embed: this.image_encoded.image_embed,
@@ -152,13 +170,8 @@ export class SAM2 {
         1,
         flatLabels.length,
       ]),
-      mask_input: new ort.Tensor(
-        "float32",
-        new Float32Array(256 * 256),
-        [1, 1, 256, 256]
-      ),
-      has_mask_input: new ort.Tensor("float32", [0], [1]),
-      orig_im_size: new ort.Tensor("int32", [1024, 1024], [2]),
+      mask_input: mask_input,
+      has_mask_input: has_mask_input,
     };
 
     return await session.run(inputs);
