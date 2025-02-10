@@ -19,6 +19,7 @@ import {
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
+import InputDialog from "@/components/ui/inputdialog";
 import { Button } from "@/components/ui/button";
 import {
   LoaderCircle,
@@ -58,11 +59,6 @@ export default function Home() {
   const [image, setImage] = useState(null); // canvas
   const [mask, setMask] = useState(null); // canvas
   const [prevMaskArray, setPrevMaskArray] = useState(null); // Float32Array
-  // const [imageURL, setImageURL] = useState("/image_landscape.png")
-  // const [imageURL, setImageURL] = useState("/image_portrait.png")
-  const [urlText, setUrlText] = useState(
-    "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
-  );
   const [imageURL, setImageURL] = useState(
     "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
   );
@@ -71,6 +67,10 @@ export default function Home() {
   const pointsRef = useRef([]);
 
   const [stats, setStats] = useState(null);
+
+  // input dialog for custom URLs
+  const [inputDialogOpen, setInputDialogOpen] = useState(false);
+  const inputDialogDefaultURL = "https://upload.wikimedia.org/wikipedia/commons/9/96/Pro_Air_Martin_404_N255S.jpg"
 
   // Start encoding image
   const encodeImageClick = async () => {
@@ -185,17 +185,30 @@ export default function Home() {
     document.body.removeChild(link);
   };
 
-  function handleUrlText(e) {
-    setUrlText(e.target.value);
-  }
-
-  // Upload new image
-  const handleUrl = () => {
-    const dataURL = urlText;
+  // Reset all the image-based state: points, mask, offscreen canvases .. 
+  const resetState = () => {
+    pointsRef.current = [];
     setImage(null);
     setMask(null);
     setPrevMaskArray(null);
     setImageEncoded(false);
+  }
+
+  // New image: From File
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0]
+    const dataURL = window.URL.createObjectURL(file)
+
+    resetState()
+    setStatus("Encode image")
+    setImageURL(dataURL)
+  }
+
+  // New image: From URL 
+  const handleUrl = (urlText) => {
+    const dataURL = urlText;
+
+    resetState()
     setStatus("Encode image");
     setImageURL(dataURL);
   };
@@ -357,12 +370,18 @@ export default function Home() {
                 </p>
               </Button>
               <div className="flex gap-1">
+                <Button 
+                  onClick={()=>{fileInputEl.current.click()}} 
+                  variant="secondary" 
+                  disabled={loading}>
+                  <ImageUp/> Upload
+                </Button>
                 <Button
-                    onClick={handleUrl}
+                    onClick={()=>{setInputDialogOpen(true)}}
                     variant="secondary"
                     disabled={loading}
                   >
-                    <ImageUp /> Use image from URL
+                  <ImageUp/> From URL
                 </Button>
                 <Button 
                   onClick={cropClick} 
@@ -371,14 +390,6 @@ export default function Home() {
                   <ImageDown/> Crop
                 </Button>
               </div>
-            </div>
-            <div className="flex">
-              <input
-                className="w-full border-2 border-gray-600"
-                type="text"
-                onChange={handleUrlText}
-                value={urlText}
-              />
             </div>
             <div className="flex justify-center">
               <canvas
@@ -403,6 +414,21 @@ export default function Home() {
           </pre>
         </div>
       </Card>
+      <InputDialog 
+        open={inputDialogOpen} 
+        setOpen={setInputDialogOpen} 
+        submitCallback={handleUrl}
+        defaultURL={inputDialogDefaultURL}
+        />
+      <input 
+        ref={fileInputEl} 
+        hidden="True" 
+        accept="image/*" 
+        type='file' 
+        onInput={handleFileUpload} 
+        />
+      {/*RE ENABLE THIS!*/}
+      {/*<Analytics />*/}
     </div>
   );
 }
