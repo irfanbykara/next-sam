@@ -325,26 +325,23 @@ export default function Home() {
         </div>
         <CardHeader>
           <CardTitle>
-            <p>
-              Clientside Image Segmentation with onnxruntime-web and Meta's SAM2
-              (forked from{" "}
-              <a href="https://github.com/geronimi73/next-sam">
-                geronimi73/next-sam
-              </a>
-              )
-            </p>
-            <p
-              className={cn(
-                "flex gap-1 items-center",
-                device ? "visible" : "invisible"
-              )}
-            >
-              <Fan
-                color="#000"
-                className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"
-              />
-              Running on {device}
-            </p>
+            <div className="flex flex-col gap-2">
+              <p>
+                Clientside Image Segmentation with onnxruntime-web and Meta's SAM2
+              </p>
+              <p
+                className={cn(
+                  "flex gap-1 items-center",
+                  device ? "visible" : "invisible"
+                )}
+              >
+                <Fan
+                  color="#000"
+                  className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"
+                />
+                Running on {device}
+              </p>
+            </div>
           </CardTitle>
         </CardHeader>
         <CardContent>
