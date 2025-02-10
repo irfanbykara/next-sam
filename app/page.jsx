@@ -427,8 +427,7 @@ export default function Home() {
         type='file' 
         onInput={handleFileUpload} 
         />
-      {/*RE ENABLE THIS!*/}
-      {/*<Analytics />*/}
+      <Analytics />
     </div>
   );
 }
