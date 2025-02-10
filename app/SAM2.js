@@ -6,10 +6,8 @@ import * as ort from "onnxruntime-web/all";
 
 const ENCODER_URL =
   "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_encoder.with_runtime_opt.ort";
-  // "/onnx/sam2_hiera_tiny_encoder.with_runtime_opt.ort"
 const DECODER_URL =
   "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_decoder_pr1.onnx";
-  // "/onnx/sam2_hiera_tiny_decoder.onnx"
 
 export class SAM2 {
   bufferEncoder = null;
@@ -27,17 +25,17 @@ export class SAM2 {
 
   async downloadModel(url) {
     // step 1: check if cached
-    // const root = await navigator.storage.getDirectory();
-    // const filename = path.basename(url);
+    const root = await navigator.storage.getDirectory();
+    const filename = path.basename(url);
 
-    // let fileHandle = await root
-    //   .getFileHandle(filename)
-    //   .catch((e) => console.error("File does not exist:", filename, e));
+    let fileHandle = await root
+      .getFileHandle(filename)
+      .catch((e) => console.error("File does not exist:", filename, e));
 
-    // if (fileHandle) {
-    //   const file = await fileHandle.getFile();
-    //   if (file.size > 0) return await file.arrayBuffer();
-    // }
+    if (fileHandle) {
+      const file = await fileHandle.getFile();
+      if (file.size > 0) return await file.arrayBuffer();
+    }
 
     // step 2: download if not cached
     // console.log("File " + filename + " not in cache, downloading from " + url);
@@ -56,16 +54,17 @@ export class SAM2 {
     }
 
     // step 3: store
-    // try {
-    //   const fileHandle = await root.getFileHandle(filename, { create: true });
-    //   const writable = await fileHandle.createWritable();
-    //   await writable.write(buffer);
-    //   await writable.close();
+    try {
+      const fileHandle = await root.getFileHandle(filename, { create: true });
+      const writable = await fileHandle.createWritable();
+      await writable.write(buffer);
+      await writable.close();
 
-    //   console.log("Stored " + filename);
-    // } catch (e) {
-    //   console.error("Storage of " + filename + " failed: ", e);
-    // }
+      console.log("Stored " + filename);
+    } catch (e) {
+      console.error("Storage of " + filename + " failed: ", e);
+    }
+
     return buffer;
   }
 
