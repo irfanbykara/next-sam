@@ -1,111 +1,177 @@
-"use client"
+"use client";
 
-import React, { useState, useEffect, useRef, createContext, useCallback } from 'react';
-import { Analytics } from '@vercel/analytics/next';
-import { cn } from "@/lib/utils"
+import React, {
+  useState,
+  useEffect,
+  useRef,
+  createContext,
+  useCallback,
+} from "react";
+import { Analytics } from "@vercel/analytics/next";
+import { cn } from "@/lib/utils";
 
 // UI
-import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card"
-import { Button } from "@/components/ui/button"
-import { Textarea } from "@/components/ui/textarea"
-import { LoaderCircle, Crop, ImageUp, Github, LoaderPinwheel, Fan } from 'lucide-react'
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardFooter,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
+import { Button } from "@/components/ui/button";
+import {
+  LoaderCircle,
+  Crop,
+  ImageUp,
+  Github,
+  LoaderPinwheel,
+  Fan,
+} from "lucide-react";
 
 // Image manipulations
-import { resizeCanvas, mergeMasks, maskImageCanvas, resizeAndPadBox, canvasToFloat32Array, sliceTensorMask } from "@/lib/imageutils"
+import {
+  resizeCanvas,
+  mergeMasks,
+  maskImageCanvas,
+  resizeAndPadBox,
+  canvasToFloat32Array,
+  float32ArrayToCanvas,
+  sliceTensor,
+  maskCanvasToFloat32Array
+} from "@/lib/imageutils";
 
 export default function Home() {
   // resize+pad all images to 1024x1024
-  const imageSize = {w: 1024, h: 1024}
+  const imageSize = { w: 1024, h: 1024 };
+  const maskSize = { w: 256, h: 256 };
 
   // state
-  const [device, setDevice] = useState(null)
-  const [loading, setLoading] = useState(false)
-  const [imageEncoded, setImageEncoded] = useState(false)
-  const [status, setStatus] = useState("")
+  const [device, setDevice] = useState(null);
+  const [loading, setLoading] = useState(false);
+  const [imageEncoded, setImageEncoded] = useState(false);
+  const [status, setStatus] = useState("");
 
   // web worker, image and mask
-  const samWorker = useRef(null)
-  const [image, setImage] = useState(null)    // canvas
-  const [mask, setMask] = useState(null)    // canvas
+  const samWorker = useRef(null);
+  const [image, setImage] = useState(null); // canvas
+  const [mask, setMask] = useState(null); // canvas
+  const [prevMaskArray, setPrevMaskArray] = useState(null); // Float32Array
   // const [imageURL, setImageURL] = useState("/image_landscape.png")
   // const [imageURL, setImageURL] = useState("/image_portrait.png")
-  const [imageURL, setImageURL] = useState("/image_square.png")
-  const canvasEl = useRef(null)
-  const fileInputEl = useRef(null)
+  const [urlText, setUrlText] = useState(
+    "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
+  );
+  const [imageURL, setImageURL] = useState(
+    "https://upload.wikimedia.org/wikipedia/commons/3/38/Flamingos_Laguna_Colorada.jpg"
+  );
+  const canvasEl = useRef(null);
+  const fileInputEl = useRef(null);
+  const pointsRef = useRef([]);
+
+  const [stats, setStats] = useState(null);
 
   // Start encoding image
   const encodeImageClick = async () => {
-    samWorker.current.postMessage({ type: 'encodeImage', data: canvasToFloat32Array(resizeCanvas(image, imageSize)) });   
+    samWorker.current.postMessage({
+      type: "encodeImage",
+      data: canvasToFloat32Array(resizeCanvas(image, imageSize)),
+    });
 
-    setLoading(true)
-    setStatus("Encoding")
-  }
+    setLoading(true);
+    setStatus("Encoding");
+  };
 
   // Start decoding, prompt with mouse coords
   const imageClick = (event) => {
     if (!imageEncoded) return;
 
-    const canvas = canvasEl.current
+    event.preventDefault();
+    console.log(event.button);
+
+    const canvas = canvasEl.current;
     const rect = event.target.getBoundingClientRect();
 
     // input image will be resized to 1024x1024 -> normalize mouse pos to 1024x1024
     const point = {
-      x: (event.clientX - rect.left) / canvas.width * imageSize.w,
-      y: (event.clientY - rect.top) / canvas.height * imageSize.h,
-      label: 1
+      x: ((event.clientX - rect.left) / canvas.width) * imageSize.w,
+      y: ((event.clientY - rect.top) / canvas.height) * imageSize.h,
+      label: event.button === 0 ? 1 : 0,
+    };
+    pointsRef.current.push(point);
+
+    // do we have a mask already? ie. a refinement click?
+    if (prevMaskArray) {
+      const maskShape = [1, 1, maskSize.w, maskSize.h]
+
+      samWorker.current.postMessage({
+        type: "decodeMask",
+        data: {
+          points: pointsRef.current,
+          maskArray: prevMaskArray,
+          maskShape: maskShape,
+        }
+      });      
+    } else {
+      samWorker.current.postMessage({
+        type: "decodeMask",
+        data: {
+          points: pointsRef.current,
+          maskArray: null,
+          maskShape: null,
+        }
+      });      
     }
 
-    samWorker.current.postMessage({ type: 'decodeMask', data: point });  
-
-    setLoading(true)
-    setStatus("Decoding")
-  }
+    setLoading(true);
+    setStatus("Decoding");
+  };
 
   // Decoding finished -> parse result and update mask
   const handleDecodingResults = (decodingResults) => {
-    // SAM2 returns 3 mask along with scores -> select best one    
-    const maskTensors = decodingResults.masks
-    const maskScores = decodingResults.iou_predictions.cpuData
-    const bestMaskIdx = maskScores.indexOf(Math.max(...maskScores))
-    const maskCanvas = sliceTensorMask(maskTensors, bestMaskIdx)    
+    // SAM2 returns 3 mask along with scores -> select best one
+    const maskTensors = decodingResults.masks;
+    const [bs, noMasks, width, height] = maskTensors.dims;
+    const maskScores = decodingResults.iou_predictions.cpuData;
+    const bestMaskIdx = maskScores.indexOf(Math.max(...maskScores));
+    const bestMaskArray = sliceTensor(maskTensors, bestMaskIdx)
+    let bestMaskCanvas = float32ArrayToCanvas(bestMaskArray, width, height)
+    bestMaskCanvas = resizeCanvas(bestMaskCanvas, imageSize);
 
-    setMask((prevMask) => {
-      if (prevMask) {
-        return mergeMasks(maskCanvas, prevMask)
-      } else {
-        return resizeCanvas(maskCanvas, imageSize)
-      }
-    })
-  }
+    setMask(bestMaskCanvas);
+    setPrevMaskArray(bestMaskArray);
+  };
 
   // Handle web worker messages
   const onWorkerMessage = (event) => {
-    const {type, data} = event.data
+    const { type, data } = event.data;
 
-    if (type == "pong" ) {
-      const {success, device} = data
+    if (type == "pong") {
+      const { success, device } = data;
 
       if (success) {
-        setLoading(false)
-        setDevice(device)
-        setStatus("Encode image")
+        setLoading(false);
+        setDevice(device);
+        setStatus("Encode image");
       } else {
-        setStatus("Error (check JS console)")
+        setStatus("Error (check JS console)");
       }
     } else if (type == "downloadInProgress" || type == "loadingInProgress") {
-      setLoading(true)
-      setStatus("Loading model")
-    } else if (type == "encodeImageDone" ) {
+      setLoading(true);
+      setStatus("Loading model");
+    } else if (type == "encodeImageDone") {
       // alert(data.durationMs)
-      setImageEncoded(true)
-      setLoading(false)
-      setStatus("Ready. Click on image")
-    } else if (type == "decodeMaskResult" ) {
-      handleDecodingResults(data) 
-      setLoading(false)
-      setStatus("Ready. Click on image")
+      setImageEncoded(true);
+      setLoading(false);
+      setStatus("Ready. Click on image");
+    } else if (type == "decodeMaskResult") {
+      handleDecodingResults(data);
+      setLoading(false);
+      setStatus("Ready. Click on image");
+    } else if (type == "stats") {
+      setStats(data);
     }
-  }
+  };
 
   // Crop image with mask
   const cropClick = (event) => {
@@ -116,72 +182,130 @@ export default function Home() {
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+  };
+
+  function handleUrlText(e) {
+    setUrlText(e.target.value);
   }
 
   // Upload new image
-  const handleFileUpload = (e) => {
-    const file = e.target.files[0]
-    const dataURL = window.URL.createObjectURL(file)
+  const handleUrl = () => {
+    const dataURL = urlText;
+    setImage(null);
+    setMask(null);
+    setPrevMaskArray(null);
+    setImageEncoded(false);
+    setStatus("Encode image");
+    setImageURL(dataURL);
+  };
 
-    setImage(null)
-    setMask(null)
-    setImageEncoded(false)
-    setStatus("Encode image")
-    setImageURL(dataURL)
+  function handleRequestStats() {
+    samWorker.current.postMessage({ type: "stats" });
   }
 
-  // Load web worker 
+  // Load web worker
   useEffect(() => {
     if (!samWorker.current) {
-      samWorker.current = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-      samWorker.current.addEventListener('message', onWorkerMessage)
-      samWorker.current.postMessage({ type: 'ping' });   
+      samWorker.current = new Worker(new URL("./worker.js", import.meta.url), {
+        type: "module",
+      });
+      samWorker.current.addEventListener("message", onWorkerMessage);
+      samWorker.current.postMessage({ type: "ping" });
 
-      setLoading(true)
+      setLoading(true);
     }
-  }, [onWorkerMessage, handleDecodingResults])
+  }, [onWorkerMessage, handleDecodingResults]);
 
   // Load image, pad to square and store in offscreen canvas
   useEffect(() => {
     if (imageURL) {
       const img = new Image();
-      img.src = imageURL
-      img.onload = function() {
-        const largestDim = img.naturalWidth > img.naturalHeight ? img.naturalWidth : img.naturalHeight
-        const box = resizeAndPadBox({h: img.naturalHeight, w: img.naturalWidth}, {h: largestDim, w: largestDim})
+      img.crossOrigin = "anonymous";
+      img.src = imageURL;
+      img.onload = function () {
+        const largestDim =
+          img.naturalWidth > img.naturalHeight
+            ? img.naturalWidth
+            : img.naturalHeight;
+        const box = resizeAndPadBox(
+          { h: img.naturalHeight, w: img.naturalWidth },
+          { h: largestDim, w: largestDim }
+        );
 
-        const canvas = document.createElement('canvas');
-        canvas.width = largestDim
-        canvas.height = largestDim
+        const canvas = document.createElement("canvas");
+        canvas.width = largestDim;
+        canvas.height = largestDim;
 
-        canvas.getContext('2d').drawImage(img, 0, 0, img.naturalWidth, img.naturalHeight, box.x, box.y, box.w, box.h)
-        setImage(canvas)
-      }
+        canvas
+          .getContext("2d")
+          .drawImage(
+            img,
+            0,
+            0,
+            img.naturalWidth,
+            img.naturalHeight,
+            box.x,
+            box.y,
+            box.w,
+            box.h
+          );
+        setImage(canvas);
+      };
     }
   }, [imageURL]);
 
-  // Offscreen canvas changed, draw it 
+  // Offscreen canvas changed, draw it
   useEffect(() => {
     if (image) {
-      const canvas = canvasEl.current
-      const ctx = canvas.getContext('2d');
+      const canvas = canvasEl.current;
+      const ctx = canvas.getContext("2d");
       ctx.clearRect(0, 0, canvas.width, canvas.height);
-      ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, canvas.width, canvas.height);      
+      ctx.drawImage(
+        image,
+        0,
+        0,
+        image.width,
+        image.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
     }
   }, [image]);
 
   // Mask changed, draw original image and mask on top with some alpha
   useEffect(() => {
     if (mask) {
-      const canvas = canvasEl.current
-      const ctx = canvas.getContext('2d')
+      const canvas = canvasEl.current;
+      const ctx = canvas.getContext("2d");
 
-      ctx.drawImage(image, 0, 0, image.width, image.height, 0, 0, canvas.width, canvas.height);      
-      ctx.globalAlpha = 0.4
-      ctx.drawImage(mask, 0, 0, mask.width, mask.height, 0, 0, canvas.width, canvas.height);      
+      ctx.drawImage(
+        image,
+        0,
+        0,
+        image.width,
+        image.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
+      ctx.globalAlpha = 0.7;
+      ctx.drawImage(
+        mask,
+        0,
+        0,
+        mask.width,
+        mask.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+      );
       ctx.globalAlpha = 1;
     }
-  }, [mask, image])
+  }, [mask, image]);
 
   return (
     <div className="flex items-center justify-center min-h-screen bg-background p-4">
@@ -190,7 +314,9 @@ export default function Home() {
           <Button
             variant="outline"
             size="sm"
-            onClick={() => window.open('https://github.com/geronimi73/next-sam', '_blank')}
+            onClick={() =>
+              window.open("https://github.com/geronimi73/next-sam", "_blank")
+            }
           >
             <Github className="w-4 h-4 mr-2" />
             View on GitHub
@@ -198,36 +324,79 @@ export default function Home() {
         </div>
         <CardHeader>
           <CardTitle>
-            <p>Clientside Image Segmentation with onnxruntime-web and Meta's SAM2
+            <p>
+              Clientside Image Segmentation with onnxruntime-web and Meta's SAM2
+              (forked from{" "}
+              <a href="https://github.com/geronimi73/next-sam">
+                geronimi73/next-sam
+              </a>
+              )
             </p>
-            <p className={cn("flex gap-1 items-center", device ? "visible" : "invisible")}>
-              <Fan color="#000" className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"/>
+            <p
+              className={cn(
+                "flex gap-1 items-center",
+                device ? "visible" : "invisible"
+              )}
+            >
+              <Fan
+                color="#000"
+                className="w-6 h-6 animate-[spin_2.5s_linear_infinite] direction-reverse"
+              />
               Running on {device}
-            </p>              
+            </p>
           </CardTitle>
         </CardHeader>
         <CardContent>
           <div className="flex flex-col gap-4">
             <div className="flex justify-between gap-4">
-              <Button onClick={encodeImageClick} disabled={loading || imageEncoded}>
+              <Button
+                onClick={encodeImageClick}
+                disabled={loading || imageEncoded}
+              >
                 <p className="flex items-center gap-2">
-                  { loading && <LoaderCircle className="animate-spin w-6 h-6" /> }
+                  {loading && <LoaderCircle className="animate-spin w-6 h-6" />}
                   {status}
                 </p>
               </Button>
-              { mask &&
-                <Button onClick={cropClick} variant="secondary"><Crop/> Crop</Button>
-              }
-              <Button onClick={()=>{fileInputEl.current.click()}} variant="secondary" disabled={loading}><ImageUp/> Change image</Button>
+              <Button
+                onClick={handleUrl}
+                variant="secondary"
+                disabled={loading}
+              >
+                <ImageUp /> Use image from URL
+              </Button>
+            </div>
+            <div className="flex">
+              <input
+                className="w-full border-2 border-gray-600"
+                type="text"
+                onChange={handleUrlText}
+                value={urlText}
+              />
             </div>
             <div className="flex justify-center">
-              <canvas ref={canvasEl} width={512} height={512} onClick={imageClick}/>
+              <canvas
+                ref={canvasEl}
+                width={512}
+                height={512}
+                onClick={imageClick}
+                onContextMenu={(event) => {
+                  event.preventDefault();
+                  imageClick(event);
+                }}
+              />
             </div>
           </div>
         </CardContent>
+        <div className="flex flex-col p-4 gap-2">
+          <Button onClick={handleRequestStats} variant="secondary">
+            Print stats
+          </Button>
+          <pre className="p-4 border-gray-600 bg-gray-100">
+            {stats != null && JSON.stringify(stats, null, 2)}
+          </pre>
+        </div>
       </Card>
-      <input ref={fileInputEl} hidden="True" accept="image/*" type='file' onInput={handleFileUpload} />
-      <Analytics />
     </div>
   );
 }

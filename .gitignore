@@ -7,3 +7,9 @@
 /app/distilbert-sst
 /app/api
 lib/serverlog.js
+app/.page.jsx.swp
+notebooks/.ipynb_checkpoints/SAM2-to-ONNX-checkpoint.ipynb
+/notebooks/.ipynb_checkpoints
+*.pt
+*.onnx
+*.ort
