@@ -36,10 +36,9 @@ Open your browser and visit http://localhost:3000
 
 # Acknowledgements
 * [Meta's Segment Anything Model 2](https://ai.meta.com/blog/segment-anything-2/)
+* [@raedle](https://github.com/raedle) for adding [positive/negative clicks](https://github.com/geronimi73/next-sam/pull/1)
 * [onnxruntime](https://github.com/microsoft/onnxruntime)
 * [Shadcn/ui components](https://ui.shadcn.com/)
-
-Last but not least!
 * [transformer.js](https://github.com/huggingface/transformers.js)
 * https://github.com/ibaiGorordo/ONNX-SAM2-Segment-Anything
 * https://github.com/lucasgelfond/webgpu-sam2
