@@ -24,6 +24,7 @@ import {
   LoaderCircle,
   Crop,
   ImageUp,
+  ImageDown,
   Github,
   LoaderPinwheel,
   Fan,
@@ -358,13 +359,21 @@ export default function Home() {
                   {status}
                 </p>
               </Button>
-              <Button
-                onClick={handleUrl}
-                variant="secondary"
-                disabled={loading}
-              >
-                <ImageUp /> Use image from URL
-              </Button>
+              <div className="flex gap-1">
+                <Button
+                    onClick={handleUrl}
+                    variant="secondary"
+                    disabled={loading}
+                  >
+                    <ImageUp /> Use image from URL
+                </Button>
+                <Button 
+                  onClick={cropClick} 
+                  disabled={mask==null}
+                  variant="secondary">
+                  <ImageDown/> Crop
+                </Button>
+              </div>
             </div>
             <div className="flex">
               <input
