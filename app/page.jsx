@@ -40,7 +40,8 @@ import {
   canvasToFloat32Array,
   float32ArrayToCanvas,
   sliceTensor,
-  maskCanvasToFloat32Array
+  maskCanvasToFloat32Array,
+    canvasToBase64
 } from "@/lib/imageutils";
 
 export default function Home() {
@@ -76,7 +77,7 @@ export default function Home() {
   const encodeImageClick = async () => {
     samWorker.current.postMessage({
       type: "encodeImage",
-      data: canvasToFloat32Array(resizeCanvas(image, imageSize)),
+      data: canvasToBase64(resizeCanvas(image, imageSize)),
     });
 
     setLoading(true);
