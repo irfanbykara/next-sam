@@ -11,7 +11,6 @@ const stats = {
 };
 
 self.onmessage = async (e) => {
-  // console.log("worker received message")
 
   const { type, data } = e.data;
 
@@ -30,11 +29,11 @@ self.onmessage = async (e) => {
     self.postMessage({ type: "pong", data: report });
     self.postMessage({ type: "stats", data: stats });
   } else if (type === "encodeImage") {
-    const { float32Array, shape } = data;
-    const imgTensor = new Tensor("float32", float32Array, shape);
+    // const { float32Array, shape } = data;
+    // const imgTensor = new Tensor("float32", float32Array, shape);
 
     const startTime = performance.now();
-    await sam.encodeImage(imgTensor);
+    await sam.encodeImage(data);
     const durationMs = performance.now() - startTime;
     stats.encodeImageTimes.push(durationMs);
 
