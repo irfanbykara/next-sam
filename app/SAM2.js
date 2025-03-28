@@ -1,25 +1,18 @@
 import path from "path";
-
+import pako from "pako";
 import * as ort from "onnxruntime-web/all";
-// ort.env.wasm.numThreads=1
-// ort.env.wasm.simd = false;
+import { base64ToFloat32Array} from "@/lib/imageutils";
 
-const ENCODER_URL =
-  "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_encoder.with_runtime_opt.ort";
-const DECODER_URL =
-  "https://huggingface.co/g-ronimo/sam2-tiny/resolve/main/sam2_hiera_tiny_decoder_pr1.onnx";
+const DECODER_URL = "/sam2.1_hiera_large_decoder.onnx";
 
 export class SAM2 {
-  bufferEncoder = null;
   bufferDecoder = null;
-  sessionEncoder = null;
   sessionDecoder = null;
   image_encoded = null;
 
   constructor() {}
 
   async downloadModels() {
-    this.bufferEncoder = await this.downloadModel(ENCODER_URL);
     this.bufferDecoder = await this.downloadModel(DECODER_URL);
   }
 
@@ -38,7 +31,6 @@ export class SAM2 {
     }
 
     // step 2: download if not cached
-    // console.log("File " + filename + " not in cache, downloading from " + url);
     console.log("File not in cache, downloading from " + url);
     let buffer = null;
     try {
@@ -68,15 +60,14 @@ export class SAM2 {
     return buffer;
   }
 
-  async createSessions() {
-    const success =
-      (await this.getEncoderSession()) && (await this.getDecoderSession());
-
-    return {
-      success: success,
-      device: success ? this.sessionEncoder[1] : null,
-    };
-  }
+    async createSessions() {
+      const success = await this.getDecoderSession();
+    
+      return {
+        success: success,
+        device: success ? this.sessionDecoder[1] : null, // Assuming sessionDecoder[1] stores device info
+      };
+    }
 
   async getORTSession(model) {
     /** Creating a session with executionProviders: {"webgpu", "cpu"} fails
@@ -100,12 +91,6 @@ export class SAM2 {
     }
   }
 
-  async getEncoderSession() {
-    if (!this.sessionEncoder)
-      this.sessionEncoder = await this.getORTSession(this.bufferEncoder);
-
-    return this.sessionEncoder;
-  }
 
   async getDecoderSession() {
     if (!this.sessionDecoder)
@@ -113,18 +98,58 @@ export class SAM2 {
 
     return this.sessionDecoder;
   }
+    
 
-  async encodeImage(inputTensor) {
-    const [session, device] = await this.getEncoderSession();
-    const results = await session.run({ image: inputTensor });
+    async encodeImage(base64Data) {
+      try {
+              
+        // Prepare payload
+        const payload = {
+          base64: base64Data,
+        };
+    
+        // Convert payload to JSON string
+        const jsonString = JSON.stringify(payload);
+    
+        // Send the Base64-encoded tensor as JSON
+        const response = await fetch("https://4d9hagp2o1plq4-8188.proxy.runpod.net/encode/", {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: jsonString,
+        });
 
-    this.image_encoded = {
-      high_res_feats_0: results[session.outputNames[0]],
-      high_res_feats_1: results[session.outputNames[1]],
-      image_embed: results[session.outputNames[2]],
-    };
-  }
+        if (!response.ok) throw new Error("Failed to encode image");
+            // Check the size of the response before parsing it
 
+      let data = await response.json();
+
+        function base64ToFloat32Array(base64Str) {
+            let binaryString = atob(base64Str); // Decode Base64 to binary string
+            let len = binaryString.length;
+            let bytes = new Uint8Array(len);
+            for (let i = 0; i < len; i++) {
+                bytes[i] = binaryString.charCodeAt(i);
+            }
+            return new Float32Array(bytes.buffer); // Convert to Float32Array
+        }
+
+        let high_res_feats_0 = base64ToFloat32Array(data.high_res_feats_0);
+        let high_res_feats_1 = base64ToFloat32Array(data.high_res_feats_1);
+        let image_embed = base64ToFloat32Array(data.image_embed);
+        
+        // Convert to ONNX tensors
+        this.image_encoded = {
+          high_res_feats_0: new ort.Tensor("float32", high_res_feats_0, [1, 32, 256, 256]),
+          high_res_feats_1: new ort.Tensor("float32", high_res_feats_1, [1, 64, 128, 128]),
+          image_embed: new ort.Tensor("float32", image_embed, [1, 256, 64, 64]),
+        };
+      } catch (e) {
+        console.error("Encoding error:", e);
+      }
+    }
+    
   async decode(points, masks) {
     const [session, device] = await this.getDecoderSession();
 
@@ -176,3 +201,10 @@ export class SAM2 {
     return await session.run(inputs);
   }
 }
+
+
+
+
+
+
+
