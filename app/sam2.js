@@ -1,9 +1,9 @@
 import path from "path";
-import pako from "pako";
 import * as ort from "onnxruntime-web/all";
+
 import { base64ToFloat32Array} from "@/lib/imageutils";
 
-const DECODER_URL = "/sam2.1_hiera_large_decoder.onnx";
+const DECODER_URL = "YOUR_PATH_FOR_DECODER_ONNX_MODEL";
 
 export class SAM2 {
   bufferDecoder = null;
@@ -49,7 +49,7 @@ export class SAM2 {
     try {
       const fileHandle = await root.getFileHandle(filename, { create: true });
       const writable = await fileHandle.createWritable();
-      await writable.write(buffer);
+      await writable.write(buffer); 
       await writable.close();
 
       console.log("Stored " + filename);
@@ -99,41 +99,28 @@ export class SAM2 {
     return this.sessionDecoder;
   }
     
-
     async encodeImage(base64Data) {
       try {
               
         // Prepare payload
         const payload = {
-          base64: base64Data,
+          image_base64: base64Data,
         };
     
         // Convert payload to JSON string
         const jsonString = JSON.stringify(payload);
-    
         // Send the Base64-encoded tensor as JSON
-        const response = await fetch("https://4d9hagp2o1plq4-8188.proxy.runpod.net/encode/", {
+        const response = await fetch("YOUR_SERVING_URL/main/sam2_encoder", {
           method: "POST",
           headers: {
             "Content-Type": "application/json",
-          },
           body: jsonString,
         });
 
         if (!response.ok) throw new Error("Failed to encode image");
             // Check the size of the response before parsing it
 
-      let data = await response.json();
-
-        function base64ToFloat32Array(base64Str) {
-            let binaryString = atob(base64Str); // Decode Base64 to binary string
-            let len = binaryString.length;
-            let bytes = new Uint8Array(len);
-            for (let i = 0; i < len; i++) {
-                bytes[i] = binaryString.charCodeAt(i);
-            }
-            return new Float32Array(bytes.buffer); // Convert to Float32Array
-        }
+        let data = await response.json();
 
         let high_res_feats_0 = base64ToFloat32Array(data.high_res_feats_0);
         let high_res_feats_1 = base64ToFloat32Array(data.high_res_feats_1);
@@ -201,10 +188,3 @@ export class SAM2 {
     return await session.run(inputs);
   }
 }
-
-
-
-
-
-
-

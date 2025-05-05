@@ -306,7 +306,7 @@ export default function Home() {
         canvas.width,
         canvas.height
       );
-      ctx.globalAlpha = 0.7;
+      ctx.globalAlpha = 0.5;
       ctx.drawImage(
         mask,
         0,
