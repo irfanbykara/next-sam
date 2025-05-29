@@ -109,8 +109,6 @@ export class SAM2 {
   
       // Convert payload to JSON string
       const jsonString = JSON.stringify(payload);
-      const token = process.env.NEXT_PUBLIC_JWT_TOKEN;
-      console.log("TOKEN:", token)
 
       // Send the Base64-encoded tensor as JSON
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
@@ -119,8 +117,6 @@ export class SAM2 {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
-          "Authorization": 
-              `Bearer ${token}`,
         },
         body: jsonString,
       });
