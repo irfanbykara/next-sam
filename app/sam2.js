@@ -115,7 +115,7 @@ export class SAM2 {
       // Send the Base64-encoded tensor as JSON
       const baseUrl = process.env.NEXT_PUBLIC_BASE_URL
       console.log("NEXT_PUBLIC_BASE_URL:", baseUrl)
-      const response = await fetch(`${baseUrl}api/v1/tools/sam2_encoder`, {
+      const response = await fetch(`${baseUrl}/main/sam2_encoder`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
