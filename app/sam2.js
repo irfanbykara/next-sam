@@ -9,6 +9,7 @@ export class SAM2 {
   bufferDecoder = null;
   sessionDecoder = null;
   image_encoded = null;
+  image_size = null; // Store the size of the image that was encoded
 
   constructor() {}
 
@@ -130,6 +131,8 @@ export class SAM2 {
       let image_embed = base64ToFloat32Array(data.image_embed);
       
       // Convert to ONNX tensors
+      // Note: Images are always resized to 1024x1024 before encoding (see page.jsx line 80)
+      this.image_size = { w: 1024, h: 1024 };
       this.image_encoded = {
         high_res_feats_0: new ort.Tensor("float32", high_res_feats_0, [1, 32, 256, 256]),
         high_res_feats_1: new ort.Tensor("float32", high_res_feats_1, [1, 64, 128, 128]),
@@ -186,6 +189,10 @@ export class SAM2 {
       ]),
       mask_input: mask_input,
       has_mask_input: has_mask_input,
+      orig_im_size: new ort.Tensor("int32", [
+        this.image_size?.w || 1024, 
+        this.image_size?.h || 1024
+      ], [2]),
     };
 
     return await session.run(inputs);
