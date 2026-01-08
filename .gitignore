@@ -8,6 +8,9 @@
 /app/api
 lib/serverlog.js
 app/.page.jsx.swp
+app/.ipynb_checkpoints
+service/.ipynb_checkpoints
+service/__pycache__
 notebooks/.ipynb_checkpoints/SAM2-to-ONNX-checkpoint.ipynb
 /notebooks/.ipynb_checkpoints
 *.pt
